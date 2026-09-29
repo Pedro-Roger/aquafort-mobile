@@ -21,13 +21,14 @@ import { CycleSelector } from '../../components/CycleSelector';
 import { ResponsibleSelector } from '../../components/ResponsibleSelector';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
-import { buildWaterQualityApiPayload, saveOffline } from '../../services/water-quality.service';
+import { buildWaterQualityApiPayload, saveOffline, saveToCache } from '../../services/water-quality.service';
 import { generateUUID } from '../../utils/uuid';
 import { api } from '../../services/api';
-import type { AppStackParamList } from '../../navigation/AppNavigator';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { Pond, Cycle, User } from '../../types';
+import { ReadingPeriod } from '../../types';
 
-type Nav = NativeStackNavigationProp<AppStackParamList, 'WaterQualityForm'>;
+type Nav = NativeStackNavigationProp<RootStackParamList, 'WaterQualityForm'>;
 
 const formSchema = z.object({
   oxygenMgL: z
@@ -57,6 +58,7 @@ const formSchema = z.object({
     .pipe(z.number().min(0).max(10).optional()),
   measuredAt: z.string().min(1, 'Informe a data/hora'),
   origin: z.enum(['MANUAL', 'VOZ']),
+  period: z.nativeEnum(ReadingPeriod).optional(),
 });
 
 /**
@@ -160,6 +162,7 @@ export function WaterQualityFormScreen() {
         ammoniaMgL: data.ammoniaMgL,
         measuredAt: new Date(data.measuredAt).toISOString(),
         origin: data.origin,
+        period: data.period,
       };
 
       try {
@@ -168,8 +171,10 @@ export function WaterQualityFormScreen() {
             // CreateWaterQualityDto lives at POST /v1/water-quality — no
             // /readings suffix, and it expects doMgL/salinity/source, not
             // the local form's field names.
-            const apiPayload = buildWaterQualityApiPayload(payload, generateUUID());
+            const clientId = generateUUID();
+            const apiPayload = buildWaterQualityApiPayload(payload, clientId);
             await api.post('/v1/water-quality', apiPayload);
+            await saveToCache({ ...payload, clientId });
             Alert.alert('Sucesso', 'Coleta registrada e sincronizada!', [
               { text: 'OK', onPress: () => navigation.goBack() },
             ]);
@@ -321,6 +326,35 @@ export function WaterQualityFormScreen() {
                 >
                   <Text style={[styles.toggleText, field.value === 'VOZ' && styles.toggleTextActive]}>
                     Voz
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+
+        {/* Period toggle */}
+        <Controller
+          control={control}
+          name="period"
+          render={({ field }) => (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Período</Text>
+              <View style={styles.toggle}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, field.value === 'MORNING' && styles.toggleBtnActive]}
+                  onPress={() => field.onChange('MORNING')}
+                >
+                  <Text style={[styles.toggleText, field.value === 'MORNING' && styles.toggleTextActive]}>
+                    Manhã
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, field.value === 'AFTERNOON' && styles.toggleBtnActive]}
+                  onPress={() => field.onChange('AFTERNOON')}
+                >
+                  <Text style={[styles.toggleText, field.value === 'AFTERNOON' && styles.toggleTextActive]}>
+                    Tarde
                   </Text>
                 </TouchableOpacity>
               </View>
