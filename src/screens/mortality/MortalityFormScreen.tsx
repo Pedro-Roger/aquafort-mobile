@@ -22,10 +22,10 @@ import { ResponsibleSelector } from '../../components/ResponsibleSelector';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { isRecordedAtTooFarInFuture, saveOfflineMortality } from '../../services/mortality.service';
-import type { AppStackParamList } from '../../navigation/AppNavigator';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { Pond, Cycle, User } from '../../types';
 
-type Nav = NativeStackNavigationProp<AppStackParamList, 'MortalityForm'>;
+type Nav = NativeStackNavigationProp<RootStackParamList, 'MortalityForm'>;
 
 const QUANTITY_REQUIRED_MSG = 'Informe a quantidade de camarões mortos (número inteiro maior que zero).';
 
