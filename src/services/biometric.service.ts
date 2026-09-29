@@ -5,7 +5,7 @@ import { getActiveFarmId } from './api';
 export interface BiometricOfflinePayload {
   cycleId: string;
   measuredAt: string;
-  sampleCount: number;
+  sampleCount?: number;
   averageWeightG: number;
   survivalRatePct?: number;
   responsibleId: string;
@@ -36,14 +36,14 @@ export async function saveOfflineBiometric(payload: BiometricOfflinePayload): Pr
   // rejects unknown fields (forbidNonWhitelisted), so responsibleName stays
   // out of the body — it's only for the local screen; the outbox list
   // resolves the name from responsibleId via the local users cache.
-  const body = {
+  const body: Record<string, unknown> = {
     cycleId: payload.cycleId,
     measuredAt: payload.measuredAt,
-    sampleCount: payload.sampleCount,
     averageWeightG: payload.averageWeightG,
-    survivalRatePct: payload.survivalRatePct,
     responsibleId: payload.responsibleId,
   };
+  if (payload.sampleCount !== undefined) body.sampleCount = payload.sampleCount;
+  if (payload.survivalRatePct !== undefined) body.survivalRatePct = payload.survivalRatePct;
 
   await outboxRepository.enqueue({
     clientId,

@@ -115,4 +115,17 @@ describe('biometric.service', () => {
     const [params] = (outboxRepository.enqueue as jest.Mock).mock.calls[0];
     expect(params.measuredAt).toBe('2026-06-18T10:00:00.000Z');
   });
+
+  it('should allow optional sampleCount (RF-16) and not include it in payload when undefined', async () => {
+    await saveOfflineBiometric({
+      cycleId: 'cycle-1',
+      measuredAt: '2026-06-18T10:00:00.000Z',
+      averageWeightG: 5.5,
+      responsibleId: 'user-1',
+      responsibleName: 'João Silva',
+    });
+
+    const [params] = (outboxRepository.enqueue as jest.Mock).mock.calls[0];
+    expect(params.payload).not.toHaveProperty('sampleCount');
+  });
 });
