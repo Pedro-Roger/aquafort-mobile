@@ -18,14 +18,15 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PondSelector } from '../../components/PondSelector';
 import { CycleSelector } from '../../components/CycleSelector';
+import { ResponsibleSelector } from '../../components/ResponsibleSelector';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { useFeedProductsCache } from '../../hooks/useFeedProductsCache';
 import { getPendingFeedKgForPond, saveOfflineFeeding } from '../../services/feeding.service';
-import type { AppStackParamList } from '../../navigation/AppNavigator';
-import type { Cycle, FeedProduct, Pond } from '../../types';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
+import type { Cycle, FeedProduct, Pond, User } from '../../types';
 
-type Nav = NativeStackNavigationProp<AppStackParamList, 'FeedingForm'>;
+type Nav = NativeStackNavigationProp<RootStackParamList, 'FeedingForm'>;
 
 /** Common tray amounts, so the operator taps instead of typing in the sun. */
 const QUICK_KG = [10, 20, 30, 50];
@@ -57,6 +58,9 @@ export function FeedingFormScreen() {
 
   const [selectedPond, setSelectedPond] = useState<Pond | null>(null);
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(
+    user ? { id: user.id, name: user.name, role: user.role, active: true, updatedAt: '' } : null,
+  );
   const [product, setProduct] = useState<FeedProduct | null>(null);
   const [pendingKg, setPendingKg] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -98,7 +102,8 @@ export function FeedingFormScreen() {
       if (!selectedPond) return Alert.alert('Erro', 'Selecione o viveiro.');
       if (!selectedCycle) return Alert.alert('Erro', 'Selecione o ciclo.');
       if (!product) return Alert.alert('Erro', 'Nenhum produto de ração disponível. Sincronize primeiro.');
-      if (!user) return Alert.alert('Erro', 'Sessão sem usuário.');
+      const resp = selectedUser ?? (user ? { id: user.id, name: user.name } : null);
+      if (!resp) return Alert.alert('Erro', 'Selecione o responsável.');
 
       setSaving(true);
       try {
@@ -108,8 +113,8 @@ export function FeedingFormScreen() {
           productId: product.id,
           feedKg: data.feedKg,
           fedAt: new Date().toISOString(),
-          responsibleId: user.id,
-          responsibleName: user.name,
+          responsibleId: resp.id,
+          responsibleName: resp.name,
           observation: data.observation?.trim() || undefined,
         });
 
@@ -124,7 +129,7 @@ export function FeedingFormScreen() {
         setSaving(false);
       }
     },
-    [selectedCycle, selectedPond, product, user, syncNow, navigation, reset],
+    [selectedCycle, selectedPond, product, selectedUser, user, syncNow, navigation, reset],
   );
 
   const parsedKgPreview = parseFloat((feedKgRaw ?? '').replace(',', '.'));
@@ -233,6 +238,15 @@ export function FeedingFormScreen() {
             </View>
           )}
         />
+
+        <View style={styles.divider} />
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>
+            Responsável <Text style={styles.required}>*</Text>
+          </Text>
+          <ResponsibleSelector value={selectedUser} onChange={setSelectedUser} />
+        </View>
 
         <TouchableOpacity
           style={[styles.submitBtn, saving && styles.submitBtnDisabled]}
