@@ -33,6 +33,11 @@ export enum SyncStatus {
   ERROR = 'error',
 }
 
+export enum ReadingPeriod {
+  MORNING = 'MORNING',
+  AFTERNOON = 'AFTERNOON',
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain interfaces
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +88,7 @@ export interface WaterQualityRecord {
   ammoniaMgL?: number;
   measuredAt: string;
   origin: 'MANUAL' | 'VOZ';
+  period?: ReadingPeriod;
 }
 
 export interface OutboxItem {

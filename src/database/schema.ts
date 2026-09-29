@@ -70,9 +70,27 @@ export const CREATE_FEED_PRODUCTS_CACHE = `
   );
 `;
 
+export const CREATE_WATER_QUALITY_READINGS_CACHE = `
+  CREATE TABLE IF NOT EXISTS water_quality_readings_cache (
+    id            TEXT PRIMARY KEY,
+    client_uuid   TEXT,
+    pond_id       TEXT NOT NULL,
+    measured_at   TEXT NOT NULL,
+    oxygen_mg_l   REAL,
+    ph            REAL,
+    salinity_ppt  REAL,
+    temperature_c REAL,
+    ammonia_mg_l  REAL,
+    synced        INTEGER DEFAULT 1,
+    created_at    TEXT DEFAULT (datetime('now'))
+  );
+`;
+
 export const CREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox (status, created_at);
   CREATE INDEX IF NOT EXISTS idx_cycles_pond ON cycles_cache (pond_id, status);
+  CREATE INDEX IF NOT EXISTS idx_wq_readings_pond ON water_quality_readings_cache (pond_id, measured_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_wq_readings_synced ON water_quality_readings_cache (synced);
 `;
 
 export const ALL_MIGRATIONS = [
@@ -81,5 +99,6 @@ export const ALL_MIGRATIONS = [
   CREATE_CYCLES_CACHE,
   CREATE_USERS_CACHE,
   CREATE_FEED_PRODUCTS_CACHE,
+  CREATE_WATER_QUALITY_READINGS_CACHE,
   CREATE_INDEXES,
 ];

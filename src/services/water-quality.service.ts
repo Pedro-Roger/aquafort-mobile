@@ -1,4 +1,5 @@
 import { outboxRepository } from '../database/repositories/outbox.repository';
+import { insertReadingCache } from '../database/repositories/waterQualityReadingsCache.repository';
 import { generateUUID } from '../utils/uuid';
 import { getActiveFarmId } from './api';
 import type { WaterQualityRecord } from '../types';
@@ -22,6 +23,7 @@ export interface WaterQualityApiPayload {
   measuredAt: string;
   source: 'manual' | 'voz';
   clientId: string;
+  period?: 'morning' | 'afternoon';
 }
 
 export function buildWaterQualityApiPayload(
@@ -39,6 +41,7 @@ export function buildWaterQualityApiPayload(
     measuredAt: data.measuredAt,
     source: data.origin === 'VOZ' ? 'voz' : 'manual',
     clientId,
+    period: data.period === 'MORNING' ? 'morning' : data.period === 'AFTERNOON' ? 'afternoon' : undefined,
   };
 }
 
@@ -64,4 +67,21 @@ export async function saveOffline(
   });
 
   return clientId;
+}
+
+export async function saveToCache(
+  data: Omit<WaterQualityRecord, 'clientId'> & { clientId: string }
+): Promise<void> {
+  await insertReadingCache({
+    id: data.clientId,
+    clientUuid: data.clientId,
+    pondId: data.pondId,
+    measuredAt: data.measuredAt,
+    oxygenMgL: data.oxygenMgL ?? null,
+    ph: data.ph ?? null,
+    salinityPpt: data.salinityPpt ?? null,
+    temperatureC: data.temperatureC ?? null,
+    ammoniaMgL: data.ammoniaMgL ?? null,
+    synced: 1,
+  });
 }
