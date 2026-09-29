@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Maestri / local agent workspace
+.maestri/
+.opencode/
+.loop/
