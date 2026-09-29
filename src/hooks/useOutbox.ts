@@ -34,5 +34,10 @@ export function useOutbox(filterStatus?: SyncStatus) {
     [load],
   );
 
-  return { items, isLoading, counts, reload: load, retryOne };
+  const retryAllErrors = useCallback(async () => {
+    await outboxRepository.retryAllErrors();
+    await load();
+  }, [load]);
+
+  return { items, isLoading, counts, reload: load, retryOne, retryAllErrors };
 }
