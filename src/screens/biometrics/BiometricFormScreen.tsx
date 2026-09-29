@@ -22,19 +22,19 @@ import { ResponsibleSelector } from '../../components/ResponsibleSelector';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { isMeasuredAtTooFarInFuture, saveOfflineBiometric } from '../../services/biometric.service';
-import { isBercarioPondType, resolveAverageWeightGInput } from '../../utils/plPerGram';
-import type { AppStackParamList } from '../../navigation/AppNavigator';
+import { isBercarioPondType, resolveAverageWeightGInput, plPerGramToAverageWeightG } from '../../utils/plPerGram';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { Pond, Cycle, User } from '../../types';
 
-type Nav = NativeStackNavigationProp<AppStackParamList, 'BiometricForm'>;
+type Nav = NativeStackNavigationProp<RootStackParamList, 'BiometricForm'>;
 
-const REQUIRED_MSG = 'Informe nº de amostras e peso médio.';
+const REQUIRED_MSG = 'Informe peso médio.';
 
 const formSchema = z.object({
   sampleCount: z
     .string()
-    .min(1, REQUIRED_MSG)
-    .transform((v) => Number(v)),
+    .optional()
+    .transform((v) => (v && v.trim() ? Number(v) : undefined)),
   averageWeightG: z
     .string()
     .min(1, REQUIRED_MSG)
@@ -61,6 +61,8 @@ export function BiometricFormScreen() {
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   /** RF-10/RN-10: bercario cycles read the weight field as PL/g; engorda/reprodutor keep grams. */
   const isBercario = isBercarioPondType(selectedPond?.type);
+  /** Toggle: when true, field is "Peso médio (g)" directly; when false (default), field is "PL/grama" */
+  const [useWeightDirect, setUseWeightDirect] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(
     user ? { id: user.id, name: user.name, role: user.role, active: true, updatedAt: '' } : null,
   );
@@ -83,13 +85,20 @@ export function BiometricFormScreen() {
     async (data: FormData, resp: { id: string; name: string }, measuredAt: Date) => {
       setSaving(true);
       try {
+        let averageWeightG: number;
+        if (isBercario && !useWeightDirect) {
+          // PL/grama mode: convert to avg_weight_g
+          averageWeightG = plPerGramToAverageWeightG(data.averageWeightG);
+        } else {
+          // Peso direto mode (or non-bercario): use value as-is
+          averageWeightG = data.averageWeightG;
+        }
+
         await saveOfflineBiometric({
           cycleId: selectedCycle!.id,
           measuredAt: measuredAt.toISOString(),
           sampleCount: data.sampleCount,
-          // RF-10/RF-11: for a bercario cycle this field was read as PL/g —
-          // converts to avg_weight_g (RN-09) before it reaches the offline DTO.
-          averageWeightG: resolveAverageWeightGInput(data.averageWeightG, selectedPond?.type),
+          averageWeightG,
           survivalRatePct: data.survivalRatePct,
           responsibleId: resp.id,
           responsibleName: resp.name,
@@ -104,7 +113,7 @@ export function BiometricFormScreen() {
         setSaving(false);
       }
     },
-    [selectedCycle, selectedPond, syncNow, navigation],
+    [selectedCycle, selectedPond, syncNow, navigation, isBercario, useWeightDirect],
   );
 
   const onSubmit = useCallback(
@@ -164,15 +173,13 @@ export function BiometricFormScreen() {
           name="sampleCount"
           render={({ field }) => (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                Nº de amostras <Text style={styles.required}>*</Text>
-              </Text>
+              <Text style={styles.label}>Nº de amostras</Text>
               <TextInput
                 style={[styles.input, errors.sampleCount && styles.inputError]}
                 keyboardType="numeric"
                 value={field.value}
                 onChangeText={field.onChange}
-                placeholder="30"
+                placeholder="30 (opcional)"
                 placeholderTextColor="#64748b"
               />
               {errors.sampleCount && <Text style={styles.errorText}>{errors.sampleCount.message}</Text>}
@@ -185,15 +192,27 @@ export function BiometricFormScreen() {
           name="averageWeightG"
           render={({ field }) => (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
-                {isBercario ? 'PL/grama' : 'Peso médio (g)'} <Text style={styles.required}>*</Text>
-              </Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>
+                  {isBercario && !useWeightDirect ? 'PL/grama' : 'Peso médio (g)'} <Text style={styles.required}>*</Text>
+                </Text>
+                {isBercario && (
+                  <TouchableOpacity
+                    style={styles.toggleBtn}
+                    onPress={() => setUseWeightDirect(!useWeightDirect)}
+                  >
+                    <Text style={[styles.toggleText, useWeightDirect && styles.toggleTextActive]}>
+                      {useWeightDirect ? 'Usar PL/grama' : 'Usar Peso direto (g)'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <TextInput
                 style={[styles.input, errors.averageWeightG && styles.inputError]}
                 keyboardType="decimal-pad"
                 value={field.value}
                 onChangeText={field.onChange}
-                placeholder={isBercario ? 'Pós-larvas por grama' : '5.50'}
+                placeholder={isBercario && !useWeightDirect ? 'Pós-larvas por grama' : '5.50'}
                 placeholderTextColor="#64748b"
               />
               {errors.averageWeightG && (
@@ -263,13 +282,34 @@ const styles = StyleSheet.create({
     marginVertical: 24,
   },
   inputGroup: { marginBottom: 18 },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   label: {
     color: '#94a3b8',
     fontSize: 13,
     fontWeight: '600',
-    marginBottom: 8,
   },
   required: { color: '#ef4444' },
+  toggleBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  toggleText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#0ea5e9',
+  },
   input: {
     backgroundColor: '#1e293b',
     borderRadius: 8,
