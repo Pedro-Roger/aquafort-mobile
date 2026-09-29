@@ -13,10 +13,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SyncStatusBar } from '../components/SyncStatusBar';
 import { useCyclesCache } from '../hooks/useCyclesCache';
 import { useSync } from '../hooks/useSync';
-import type { AppStackParamList } from '../navigation/AppNavigator';
+import { usePondOxygenAlerts, useWebSocket } from '../hooks/useWebSocket';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Cycle } from '../types';
 
-type HomeNav = NativeStackNavigationProp<AppStackParamList, 'Home'>;
+// HomeScreen is kept for potential legacy use but not in new tab navigation
+type HomeNav = NativeStackNavigationProp<RootStackParamList, 'WaterQualityForm'>;
 
 const PHASE_LABELS: Record<string, string> = {
   PRE_BERCARIO: 'Pré-berçário',
@@ -25,7 +27,7 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 function groupByPond(cycles: Cycle[]) {
-  const map = new Map<string, { title: string; pondCode: string; data: Cycle[] }>();
+  const map = new Map<string, { title: string; pondCode: string; pondId: string; data: Cycle[] }>();
 
   for (const c of cycles) {
     const key = c.pondId;
@@ -33,6 +35,7 @@ function groupByPond(cycles: Cycle[]) {
       map.set(key, {
         title: c.pondName ?? c.pondId,
         pondCode: c.pondCode ?? '',
+        pondId: c.pondId,
         data: [],
       });
     }
@@ -46,6 +49,7 @@ export function HomeScreen() {
   const navigation = useNavigation<HomeNav>();
   const { cycles, isLoading, reload } = useCyclesCache();
   const { syncNow, isSyncing } = useSync();
+  const { isConnected: wsConnected } = useWebSocket();
 
   const handleRefresh = useCallback(async () => {
     await syncNow();
@@ -71,7 +75,7 @@ export function HomeScreen() {
   }, [navigation]);
 
   const navigateToOutbox = useCallback(() => {
-    navigation.navigate('Outbox');
+    navigation.navigate('Root' as any);
   }, [navigation]);
 
   const renderCycleItem = useCallback(({ item }: { item: Cycle }) => (
@@ -92,12 +96,46 @@ export function HomeScreen() {
   ), []);
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: { title: string; pondCode: string } }) => (
-      <View style={styles.sectionHeader}>
-        <Text style={styles.pondCode}>{section.pondCode}</Text>
-        <Text style={styles.pondName}>{section.title}</Text>
-      </View>
-    ),
+    ({ section }: { section: { title: string; pondCode: string; pondId: string } }) => {
+      const { latestEvent, hasCritical, hasWarning } = usePondOxygenAlerts(section.pondId);
+      
+      const statusColor = hasCritical
+        ? '#ef4444'
+        : hasWarning
+        ? '#f59e0b'
+        : '#22c55e';
+      const statusIcon = hasCritical
+        ? '🔴'
+        : hasWarning
+        ? '🟡'
+        : '🟢';
+      const statusLabel = hasCritical
+        ? 'CRÍTICO'
+        : hasWarning
+        ? 'ATENÇÃO'
+        : 'OK';
+      const oxygenValue = latestEvent
+        ? `${latestEvent.oxygenMgL} mg/L`
+        : '—';
+
+      return (
+        <View style={styles.sectionHeader}>
+          <View style={styles.pondInfo}>
+            <Text style={styles.pondCode}>{section.pondCode}</Text>
+            <Text style={styles.pondName}>{section.title}</Text>
+          </View>
+          <View style={styles.oxygenBadgeContainer}>
+            <View style={[styles.oxygenBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.oxygenBadgeIcon}>{statusIcon}</Text>
+              <View style={styles.oxygenBadgeTextContainer}>
+                <Text style={styles.oxygenBadgeLabel}>{statusLabel}</Text>
+                <Text style={styles.oxygenBadgeValue}>{oxygenValue}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      );
+    },
     [],
   );
 
@@ -107,7 +145,14 @@ export function HomeScreen() {
 
       {/* Header actions */}
       <View style={styles.headerRow}>
-        <Text style={styles.heading}>Ciclos Ativos</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.heading}>Ciclos Ativos</Text>
+          <View style={[styles.wsStatus, { backgroundColor: wsConnected ? '#22c55e' : '#ef4444' }]}>
+            <Text style={styles.wsStatusText}>
+              {wsConnected ? '🟢 Tempo real' : '🔴 Offline'}
+            </Text>
+          </View>
+        </View>
         <TouchableOpacity onPress={navigateToOutbox} style={styles.outboxBtn}>
           <Text style={styles.outboxBtnText}>Fila ›</Text>
         </TouchableOpacity>
@@ -170,10 +215,25 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   heading: {
     color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
+  },
+  wsStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  wsStatusText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   outboxBtn: {
     padding: 4,
@@ -190,6 +250,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 4,
     paddingHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pondInfo: {
+    flex: 1,
   },
   pondCode: {
     color: '#0ea5e9',
@@ -202,6 +268,36 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  oxygenBadgeContainer: {
+    flexShrink: 0,
+  },
+  oxygenBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  oxygenBadgeIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  oxygenBadgeTextContainer: {
+    flexDirection: 'column',
+  },
+  oxygenBadgeLabel: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  oxygenBadgeValue: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '500',
+    lineHeight: 12,
+    opacity: 0.9,
   },
   cycleItem: {
     backgroundColor: '#1e293b',
