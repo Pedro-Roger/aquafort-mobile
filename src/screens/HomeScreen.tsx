@@ -1,13 +1,5 @@
 import React, { useCallback } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  SectionList,
-} from 'react-native';
+import { View, Text, FlatList, SectionList, RefreshControl, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SyncStatusBar } from '../components/SyncStatusBar';
@@ -16,6 +8,8 @@ import { useSync } from '../hooks/useSync';
 import { usePondOxygenAlerts, useWebSocket } from '../hooks/useWebSocket';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Cycle } from '../types';
+import { ScreenWrapper, Section, Card, Badge, PhaseBadge, StatusBadge, Button, Spacer } from '../components/ui';
+import { spacing, colors, typography, borderRadius } from '../theme/tokens';
 
 // HomeScreen is kept for potential legacy use but not in new tab navigation
 type HomeNav = NativeStackNavigationProp<RootStackParamList, 'WaterQualityForm'>;
@@ -44,6 +38,14 @@ function groupByPond(cycles: Cycle[]) {
 
   return Array.from(map.values());
 }
+
+const sectionHeaderStyle = {
+  flexDirection: 'row' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'space-between' as const,
+  paddingHorizontal: spacing[1],
+  paddingVertical: spacing[1],
+};
 
 export function HomeScreen() {
   const navigation = useNavigation<HomeNav>();
@@ -79,59 +81,37 @@ export function HomeScreen() {
   }, [navigation]);
 
   const renderCycleItem = useCallback(({ item }: { item: Cycle }) => (
-    <View style={styles.cycleItem}>
-      <View style={styles.cycleLeft}>
-        <Text style={styles.cyclePhase}>{PHASE_LABELS[item.phase] ?? item.phase}</Text>
-        {item.supplier && (
-          <Text style={styles.cycleSupplier}>{item.supplier}</Text>
-        )}
+    <Card variant="default" padding={3} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <View style={{ flex: 1 }}>
+        <PhaseBadge phase={item.phase} size="sm" />
+        {item.supplier && <Spacer size={1} />}
+        {item.supplier && <span style={{ fontSize: typography.fontSize.sm, color: colors.text.muted }}>{item.supplier}</span>}
       </View>
       {item.daysOfCulture != null && (
-        <View style={styles.daysBadge}>
-          <Text style={styles.daysNumber}>{item.daysOfCulture}</Text>
-          <Text style={styles.daysLabel}>dias</Text>
+        <View style={{ alignItems: 'center', backgroundColor: colors.neutral[900], borderRadius: borderRadius.md, paddingHorizontal: spacing[3], paddingVertical: spacing[1] }}>
+          <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.heavy, color: colors.primary[400] }}>{item.daysOfCulture}</span>
+          <span style={{ fontSize: typography.fontSize.xs, color: colors.text.muted }}>dias</span>
         </View>
       )}
-    </View>
+    </Card>
   ), []);
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: { title: string; pondCode: string; pondId: string } }) => {
       const { latestEvent, hasCritical, hasWarning } = usePondOxygenAlerts(section.pondId);
       
-      const statusColor = hasCritical
-        ? '#ef4444'
-        : hasWarning
-        ? '#f59e0b'
-        : '#22c55e';
-      const statusIcon = hasCritical
-        ? '🔴'
-        : hasWarning
-        ? '🟡'
-        : '🟢';
-      const statusLabel = hasCritical
-        ? 'CRÍTICO'
-        : hasWarning
-        ? 'ATENÇÃO'
-        : 'OK';
-      const oxygenValue = latestEvent
-        ? `${latestEvent.oxygenMgL} mg/L`
-        : '—';
+      const statusType = hasCritical ? 'critical' : hasWarning ? 'warning' : 'ok';
+      const oxygenValue = latestEvent ? `${latestEvent.oxygenMgL} mg/L` : '—';
 
       return (
-        <View style={styles.sectionHeader}>
-          <View style={styles.pondInfo}>
-            <Text style={styles.pondCode}>{section.pondCode}</Text>
-            <Text style={styles.pondName}>{section.title}</Text>
+        <View style={sectionHeaderStyle}>
+          <View style={{ flexDirection: 'column', gap: spacing[0.5] }}>
+            <span style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold, letterSpacing: typography.letterSpacing.widest, textTransform: 'uppercase', color: colors.primary[400] }}>{section.pondCode}</span>
+            <span style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>{section.title}</span>
           </View>
-          <View style={styles.oxygenBadgeContainer}>
-            <View style={[styles.oxygenBadge, { backgroundColor: statusColor }]}>
-              <Text style={styles.oxygenBadgeIcon}>{statusIcon}</Text>
-              <View style={styles.oxygenBadgeTextContainer}>
-                <Text style={styles.oxygenBadgeLabel}>{statusLabel}</Text>
-                <Text style={styles.oxygenBadgeValue}>{oxygenValue}</Text>
-              </View>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing[2] }}>
+            <StatusBadge status={statusType} size="md" />
+            <span style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium, color: colors.text.secondary }}>{oxygenValue}</span>
           </View>
         </View>
       );
@@ -140,32 +120,37 @@ export function HomeScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <SyncStatusBar />
-
-      {/* Header actions */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.heading}>Ciclos Ativos</Text>
-          <View style={[styles.wsStatus, { backgroundColor: wsConnected ? '#22c55e' : '#ef4444' }]}>
-            <Text style={styles.wsStatusText}>
-              {wsConnected ? '🟢 Tempo real' : '🔴 Offline'}
-            </Text>
-          </View>
+    <ScreenWrapper
+      refreshControl={
+        <RefreshControl
+          refreshing={isLoading || isSyncing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary[400]}
+        />
+      }
+    >
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[2] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing[3] }}>
+          <span style={{ fontSize: typography.fontSize['3xl'], fontWeight: typography.fontWeight.heavy, color: colors.text.primary }}>Ciclos Ativos</span>
+          <StatusBadge status={wsConnected ? 'online' : 'offline'} size="sm" />
         </View>
-        <TouchableOpacity onPress={navigateToOutbox} style={styles.outboxBtn}>
-          <Text style={styles.outboxBtnText}>Fila ›</Text>
-        </TouchableOpacity>
+        <Button variant="ghost" size="sm" onPress={navigateToOutbox} accessibilityLabel="Ver fila de sincronização">
+          Fila ›
+        </Button>
       </View>
 
       {sections.length === 0 && !isLoading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🌊</Text>
-          <Text style={styles.emptyTitle}>Nenhum ciclo ativo</Text>
-          <Text style={styles.emptySubtitle}>Sincronize para carregar os dados</Text>
-          <TouchableOpacity style={styles.syncBtnLarge} onPress={handleRefresh}>
-            <Text style={styles.syncBtnText}>Sincronizar agora</Text>
-          </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8] }}>
+          <span style={{ fontSize: 56, marginBottom: spacing[4] }}>🌊</span>
+          <Spacer size={3} />
+          <span style={{ fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.semibold, color: colors.text.primary }}>Nenhum ciclo ativo</span>
+          <Spacer size={1} />
+          <span style={{ fontSize: typography.fontSize.base, color: colors.text.secondary, textAlign: 'center' }}>Sincronize para carregar os dados</span>
+          <Spacer size={4} />
+          <Button variant="primary" size="lg" onPress={handleRefresh} fullWidth={false}>
+            Sincronizar agora
+          </Button>
         </View>
       ) : (
         <SectionList
@@ -173,247 +158,43 @@ export function HomeScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderCycleItem}
           renderSectionHeader={renderSectionHeader}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={{ paddingHorizontal: spacing[4], paddingBottom: 100 }}
           refreshControl={
             <RefreshControl
               refreshing={isLoading || isSyncing}
               onRefresh={handleRefresh}
-              tintColor="#0ea5e9"
+              tintColor={colors.primary[400]}
             />
           }
           stickySectionHeadersEnabled={false}
         />
       )}
 
-      {/* Feeding sits closest to the thumb: it is what the field records most. */}
-      <TouchableOpacity style={[styles.fab, styles.fabMortality]} onPress={navigateToMortalityForm}>
-        <Text style={styles.fabIcon}>💀</Text>
+      {/* FAB Stack - Primary action (feeding) is widest and most accessible */}
+      <TouchableOpacity style={[
+        { position: 'absolute', bottom: spacing[7], right: spacing[6], width: 60, height: 60, borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center' },
+        { backgroundColor: colors.error.dark, shadowColor: colors.error.dark, elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+      ]} onPress={navigateToMortalityForm} accessibilityLabel="Registrar mortalidade">
+        <span style={{ fontSize: 28 }}>💀</span>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.fab, styles.fabWater]} onPress={navigateToForm}>
-        <Text style={styles.fabIcon}>💧</Text>
+      <TouchableOpacity style={[
+        { position: 'absolute', bottom: 44, right: spacing[6], width: 60, height: 60, borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center' },
+        { backgroundColor: '#0284c7', shadowColor: '#0284c7', elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+      ]} onPress={navigateToForm} accessibilityLabel="Registrar qualidade da água">
+        <span style={{ fontSize: 28 }}>💧</span>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.fab, styles.fabBiometric]} onPress={navigateToBiometricForm}>
-        <Text style={styles.fabIcon}>⚖</Text>
+      <TouchableOpacity style={[
+        { position: 'absolute', bottom: 52, right: spacing[6], width: 60, height: 60, borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center' },
+        { backgroundColor: colors.phase.bercario, shadowColor: colors.phase.bercario, elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+      ]} onPress={navigateToBiometricForm} accessibilityLabel="Registrar biometria">
+        <span style={{ fontSize: 28 }}>⚖</span>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.fab, styles.fabFeeding]} onPress={navigateToFeedingForm}>
-        <Text style={styles.fabLabel}>Trato</Text>
+      <TouchableOpacity style={[
+        { position: 'absolute', bottom: spacing[7], right: spacing[6], width: 96, height: 60, borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center' },
+        { backgroundColor: colors.primary[400], shadowColor: colors.primary[400], elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+      ]} onPress={navigateToFeedingForm} accessibilityLabel="Registrar trato">
+        <span style={{ fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.heavy, color: colors.text.onPrimary }}>Trato</span>
       </TouchableOpacity>
-    </View>
+    </ScreenWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  heading: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  wsStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  wsStatusText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  outboxBtn: {
-    padding: 4,
-  },
-  outboxBtnText: {
-    color: '#0ea5e9',
-    fontSize: 14,
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  sectionHeader: {
-    marginTop: 16,
-    marginBottom: 4,
-    paddingHorizontal: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pondInfo: {
-    flex: 1,
-  },
-  pondCode: {
-    color: '#0ea5e9',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  pondName: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  oxygenBadgeContainer: {
-    flexShrink: 0,
-  },
-  oxygenBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  oxygenBadgeIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  oxygenBadgeTextContainer: {
-    flexDirection: 'column',
-  },
-  oxygenBadgeLabel: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  oxygenBadgeValue: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '500',
-    lineHeight: 12,
-    opacity: 0.9,
-  },
-  cycleItem: {
-    backgroundColor: '#1e293b',
-    borderRadius: 10,
-    padding: 14,
-    marginVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cycleLeft: {
-    flex: 1,
-  },
-  cyclePhase: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  cycleSupplier: {
-    color: '#64748b',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  daysBadge: {
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  daysNumber: {
-    color: '#0ea5e9',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  daysLabel: {
-    color: '#64748b',
-    fontSize: 10,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyIcon: {
-    fontSize: 56,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    color: '#64748b',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  syncBtnLarge: {
-    backgroundColor: '#0ea5e9',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  syncBtnText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 28,
-    right: 24,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#0ea5e9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-  },
-  fabBiometric: {
-    bottom: 104,
-    backgroundColor: '#0f766e',
-    shadowColor: '#0f766e',
-  },
-  fabMortality: {
-    bottom: 248,
-    backgroundColor: '#b91c1c',
-    shadowColor: '#b91c1c',
-  },
-  fabWater: {
-    bottom: 176,
-    backgroundColor: '#0284c7',
-    shadowColor: '#0284c7',
-  },
-  /** Primary action: wider, so the label fits and the thumb finds it first. */
-  fabFeeding: {
-    bottom: 28,
-    width: 96,
-    borderRadius: 30,
-    backgroundColor: '#0ea5e9',
-    shadowColor: '#0ea5e9',
-  },
-  fabLabel: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  fabIcon: {
-    color: '#ffffff',
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '300',
-  },
-});
