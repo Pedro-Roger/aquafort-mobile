@@ -1,16 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -27,6 +16,8 @@ import { api } from '../../services/api';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { Pond, Cycle, User } from '../../types';
 import { ReadingPeriod } from '../../types';
+import { ScreenWrapper, Card, CardContent, NumericInput, Button, Spacer, Section, Badge } from '../../components/ui';
+import { spacing, colors, typography, borderRadius } from '../../theme/tokens';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'WaterQualityForm'>;
 
@@ -61,52 +52,13 @@ const formSchema = z.object({
   period: z.nativeEnum(ReadingPeriod).optional(),
 });
 
-/**
- * The schema takes what the inputs hold (text) and gives back numbers, so the
- * form fields and the submit handler are typed from opposite ends of it.
- */
 type FormInput = z.input<typeof formSchema>;
 type FormData = z.output<typeof formSchema>;
 
 function nowIso(): string {
   const d = new Date();
-  // Format to local datetime string: YYYY-MM-DDTHH:MM
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-interface NumericFieldProps {
-  label: string;
-  unit: string;
-  name: keyof FormData;
-  control: any;
-  error?: string;
-  placeholder?: string;
-}
-
-function NumericField({ label, unit, name, control, error, placeholder }: NumericFieldProps) {
-  return (
-    <Controller
-      control={control}
-      name={name}
-      render={({ field }) => (
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>
-            {label} <Text style={styles.unit}>({unit})</Text>
-          </Text>
-          <TextInput
-            style={[styles.input, error && styles.inputError]}
-            value={field.value?.toString() ?? ''}
-            onChangeText={field.onChange}
-            keyboardType="decimal-pad"
-            placeholderTextColor="#64748b"
-            placeholder={placeholder ?? '—'}
-          />
-          {error && <Text style={styles.errorText}>{error}</Text>}
-        </View>
-      )}
-    />
-  );
 }
 
 export function WaterQualityFormScreen() {
@@ -121,17 +73,15 @@ export function WaterQualityFormScreen() {
   );
   const [submitting, setSubmitting] = useState(false);
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormInput, unknown, FormData>({
+  const methods = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       measuredAt: nowIso(),
       origin: 'MANUAL',
     },
   });
+
+  const { control, handleSubmit, formState: { errors }, watch, setValue } = methods;
 
   const onSubmit = useCallback(
     async (data: FormData) => {
@@ -168,9 +118,6 @@ export function WaterQualityFormScreen() {
       try {
         if (isOnline) {
           try {
-            // CreateWaterQualityDto lives at POST /v1/water-quality — no
-            // /readings suffix, and it expects doMgL/salinity/source, not
-            // the local form's field names.
             const clientId = generateUUID();
             const apiPayload = buildWaterQualityApiPayload(payload, clientId);
             await api.post('/v1/water-quality', apiPayload);
@@ -203,297 +150,252 @@ export function WaterQualityFormScreen() {
     [selectedPond, selectedCycle, selectedUser, isOnline, navigation, syncNow],
   );
 
+  // Watch values for NumericInput display
+  const oxygenValue = watch('oxygenMgL');
+  const phValue = watch('ph');
+  const tempValue = watch('temperatureC');
+  const salinityValue = watch('salinityPpt');
+  const ammoniaValue = watch('ammoniaMgL');
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <ScreenWrapper
+      keyboardAvoiding
+      keyboardBehavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Step 1: Pond */}
-        <Text style={styles.stepLabel}>Viveiro</Text>
-        <PondSelector
-          value={selectedPond}
-          onChange={(pond) => {
-            setSelectedPond(pond);
-            setSelectedCycle(null);
-          }}
-        />
-
-        {/* Step 2: Cycle */}
-        <Text style={[styles.stepLabel, { marginTop: 16 }]}>Ciclo</Text>
-        <CycleSelector
-          pondId={selectedPond?.id ?? null}
-          value={selectedCycle}
-          onChange={setSelectedCycle}
-        />
-
-        {/* Step 3: Form */}
-        <View style={styles.divider} />
-
-        {/* Responsible */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>
-            Responsável <Text style={styles.required}>*</Text>
+      <Card variant="outlined" padding={4} style={{ marginBottom: spacing[3] }}>
+        <CardContent>
+          <Text style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold, letterSpacing: typography.letterSpacing.widest, textTransform: 'uppercase', color: colors.text.muted, marginBottom: spacing[1] }}>
+            Identificação
           </Text>
-          <ResponsibleSelector value={selectedUser} onChange={setSelectedUser} />
-        </View>
+          
+          <PondSelector
+            value={selectedPond}
+            onChange={(pond) => {
+              setSelectedPond(pond);
+              setSelectedCycle(null);
+            }}
+          />
+          <Spacer size={3} />
+          <CycleSelector
+            pondId={selectedPond?.id ?? null}
+            value={selectedCycle}
+            onChange={setSelectedCycle}
+          />
+        </CardContent>
+      </Card>
 
-        {/* Numeric fields */}
-        <NumericField
-          label="O₂"
-          unit="mg/L"
-          name="oxygenMgL"
-          control={control}
-          error={errors.oxygenMgL?.message}
-          placeholder="ex: 5.2"
-        />
-        <NumericField
-          label="pH"
-          unit=""
-          name="ph"
-          control={control}
-          error={errors.ph?.message}
-          placeholder="ex: 7.8"
-        />
-        <NumericField
-          label="Salinidade"
-          unit="ppt"
-          name="salinityPpt"
-          control={control}
-          error={errors.salinityPpt?.message}
-          placeholder="ex: 25"
-        />
-        <NumericField
-          label="Temperatura"
-          unit="°C"
-          name="temperatureC"
-          control={control}
-          error={errors.temperatureC?.message}
-          placeholder="ex: 28.5"
-        />
-        <NumericField
-          label="Amônia"
-          unit="mg/L"
-          name="ammoniaMgL"
-          control={control}
-          error={errors.ammoniaMgL?.message}
-          placeholder="ex: 0.1"
-        />
-
-        {/* Date/time */}
-        <Controller
-          control={control}
-          name="measuredAt"
-          render={({ field }) => (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Data/Hora da Coleta</Text>
-              <TextInput
-                style={[styles.input, errors.measuredAt && styles.inputError]}
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholderTextColor="#64748b"
-                placeholder="YYYY-MM-DDTHH:MM"
-              />
-              {errors.measuredAt && (
-                <Text style={styles.errorText}>{errors.measuredAt.message}</Text>
-              )}
-            </View>
-          )}
-        />
-
-        {/* Origin toggle */}
-        <Controller
-          control={control}
-          name="origin"
-          render={({ field }) => (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Origem</Text>
-              <View style={styles.toggle}>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, field.value === 'MANUAL' && styles.toggleBtnActive]}
-                  onPress={() => field.onChange('MANUAL')}
-                >
-                  <Text style={[styles.toggleText, field.value === 'MANUAL' && styles.toggleTextActive]}>
-                    Manual
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, field.value === 'VOZ' && styles.toggleBtnActive]}
-                  onPress={() => field.onChange('VOZ')}
-                >
-                  <Text style={[styles.toggleText, field.value === 'VOZ' && styles.toggleTextActive]}>
-                    Voz
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
-
-        {/* Period toggle */}
-        <Controller
-          control={control}
-          name="period"
-          render={({ field }) => (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Período</Text>
-              <View style={styles.toggle}>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, field.value === 'MORNING' && styles.toggleBtnActive]}
-                  onPress={() => field.onChange('MORNING')}
-                >
-                  <Text style={[styles.toggleText, field.value === 'MORNING' && styles.toggleTextActive]}>
-                    Manhã
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toggleBtn, field.value === 'AFTERNOON' && styles.toggleBtnActive]}
-                  onPress={() => field.onChange('AFTERNOON')}
-                >
-                  <Text style={[styles.toggleText, field.value === 'AFTERNOON' && styles.toggleTextActive]}>
-                    Tarde
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
-
-        {/* Offline notice */}
-        {!isOnline && (
-          <View style={styles.offlineBanner}>
-            <Text style={styles.offlineText}>
-              📡 Modo offline — dados serão sincronizados quando houver conexão
+      <Card variant="outlined" padding={4} style={{ marginBottom: spacing[3] }}>
+        <CardContent>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[2] }}>
+            <Text style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold, letterSpacing: typography.letterSpacing.widest, textTransform: 'uppercase', color: colors.text.muted }}>
+              Parâmetros Principais
             </Text>
+            <Badge variant="info" size="sm" dot dotColor={colors.primary[400]}>
+              Prioritários
+            </Badge>
           </View>
-        )}
 
-        {/* Submit */}
-        <TouchableOpacity
-          style={[styles.button, submitting && styles.buttonDisabled]}
-          onPress={handleSubmit(onSubmit)}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.buttonText}>
-              {isOnline ? 'Registrar Coleta' : 'Salvar Offline'}
+          <NumericInput
+            label="Oxigênio (O₂)"
+            unit="mg/L"
+            value={oxygenValue}
+            onChange={(val) => setValue('oxygenMgL', val as any, { shouldValidate: true })}
+            min={0}
+            max={20}
+            step={0.1}
+            decimals={1}
+            size="lg"
+            disabled={submitting}
+            error={errors.oxygenMgL?.message}
+          />
+          <Spacer size={3} />
+          <NumericInput
+            label="pH"
+            unit=""
+            value={phValue}
+            onChange={(val) => setValue('ph', val as any, { shouldValidate: true })}
+            min={0}
+            max={14}
+            step={0.1}
+            decimals={1}
+            size="lg"
+            disabled={submitting}
+            error={errors.ph?.message}
+          />
+          <Spacer size={3} />
+          <NumericInput
+            label="Temperatura"
+            unit="°C"
+            value={tempValue}
+            onChange={(val) => setValue('temperatureC', val as any, { shouldValidate: true })}
+            min={0}
+            max={45}
+            step={0.1}
+            decimals={1}
+            size="lg"
+            disabled={submitting}
+            error={errors.temperatureC?.message}
+          />
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined" padding={4} style={{ marginBottom: spacing[3] }}>
+        <CardContent>
+          <Text style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold, letterSpacing: typography.letterSpacing.widest, textTransform: 'uppercase', color: colors.text.muted, marginBottom: spacing[2] }}>
+            Parâmetros Adicionais
+          </Text>
+
+          <NumericInput
+            label="Salinidade"
+            unit="ppt"
+            value={salinityValue}
+            onChange={(val) => setValue('salinityPpt', val as any, { shouldValidate: true })}
+            min={0}
+            max={60}
+            step={1}
+            decimals={0}
+            size="md"
+            disabled={submitting}
+            error={errors.salinityPpt?.message}
+          />
+          <Spacer size={3} />
+          <NumericInput
+            label="Amônia"
+            unit="mg/L"
+            value={ammoniaValue}
+            onChange={(val) => setValue('ammoniaMgL', val as any, { shouldValidate: true })}
+            min={0}
+            max={10}
+            step={0.01}
+            decimals={2}
+            size="md"
+            disabled={submitting}
+            error={errors.ammoniaMgL?.message}
+          />
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined" padding={4} style={{ marginBottom: spacing[3] }}>
+        <CardContent>
+          <Text style={{ fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.bold, letterSpacing: typography.letterSpacing.widest, textTransform: 'uppercase', color: colors.text.muted, marginBottom: spacing[2] }}>
+            Metadados
+          </Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Responsável <Text style={styles.required}>*</Text>
             </Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <ResponsibleSelector value={selectedUser} onChange={setSelectedUser} />
+          </View>
+
+          <Controller
+            control={control}
+            name="measuredAt"
+            render={({ field }) => (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Data/Hora da Coleta</Text>
+                <TextInput
+                  style={[styles.input, errors.measuredAt && styles.inputError]}
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  placeholderTextColor={colors.text.muted}
+                  placeholder="YYYY-MM-DDTHH:MM"
+                />
+                {errors.measuredAt && <Text style={styles.errorText}>{errors.measuredAt.message}</Text>}
+              </View>
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="origin"
+            render={({ field }) => (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Origem</Text>
+                <View style={styles.toggle}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, field.value === 'MANUAL' && styles.toggleBtnActive]}
+                    onPress={() => field.onChange('MANUAL')}
+                  >
+                    <Text style={[styles.toggleText, field.value === 'MANUAL' && styles.toggleTextActive]}>Manual</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, field.value === 'VOZ' && styles.toggleBtnActive]}
+                    onPress={() => field.onChange('VOZ')}
+                  >
+                    <Text style={[styles.toggleText, field.value === 'VOZ' && styles.toggleTextActive]}>Voz</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="period"
+            render={({ field }) => (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Período</Text>
+                <View style={styles.toggle}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, field.value === 'MORNING' && styles.toggleBtnActive]}
+                    onPress={() => field.onChange('MORNING')}
+                  >
+                    <Text style={[styles.toggleText, field.value === 'MORNING' && styles.toggleTextActive]}>Manhã</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, field.value === 'AFTERNOON' && styles.toggleBtnActive]}
+                    onPress={() => field.onChange('AFTERNOON')}
+                  >
+                    <Text style={[styles.toggleText, field.value === 'AFTERNOON' && styles.toggleTextActive]}>Tarde</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          />
+        </CardContent>
+      </Card>
+
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>📡 Modo offline — dados serão sincronizados quando houver conexão</Text>
+        </View>
+      )}
+
+      <Button
+        variant="primary"
+        size="xl"
+        fullWidth
+        loading={submitting}
+        onPress={handleSubmit(onSubmit)}
+        disabled={submitting}
+      >
+        {isOnline ? 'Registrar Coleta' : 'Salvar Offline'}
+      </Button>
+    </ScreenWrapper>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  scroll: {
-    padding: 20,
-    paddingBottom: 60,
-  },
-  stepLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#1e293b',
-    marginVertical: 24,
-  },
-  inputGroup: {
-    marginBottom: 18,
-  },
-  label: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  unit: {
-    color: '#64748b',
-    fontWeight: '400',
-  },
-  required: {
-    color: '#ef4444',
-  },
+const styles = {
+  inputGroup: { marginBottom: spacing[4] },
+  label: { color: colors.text.secondary, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, marginBottom: spacing[1] },
+  required: { color: colors.error.light },
   input: {
-    backgroundColor: '#1e293b',
+    backgroundColor: colors.neutral[800],
     borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 8,
-    padding: 14,
-    color: '#ffffff',
-    fontSize: 15,
+    borderColor: colors.neutral[700],
+    borderRadius: borderRadius.md,
+    padding: spacing[3],
+    color: colors.text.primary,
+    fontSize: typography.fontSize.base,
   },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: '#1e293b',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    overflow: 'hidden',
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  toggleBtnActive: {
-    backgroundColor: '#0ea5e9',
-  },
-  toggleText: {
-    color: '#64748b',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  toggleTextActive: {
-    color: '#ffffff',
-  },
-  offlineBanner: {
-    backgroundColor: '#1e293b',
-    borderLeftWidth: 3,
-    borderLeftColor: '#f59e0b',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 16,
-  },
-  offlineText: {
-    color: '#f59e0b',
-    fontSize: 13,
-  },
-  button: {
-    backgroundColor: '#0ea5e9',
-    borderRadius: 10,
-    padding: 18,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#0369a1',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+  inputError: { borderColor: colors.error.light },
+  errorText: { color: colors.error.light, fontSize: typography.fontSize.xs, marginTop: spacing[1] },
+  toggle: { flexDirection: 'row' as const, backgroundColor: colors.neutral[800], borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.neutral[700], overflow: 'hidden' as const },
+  toggleBtn: { flex: 1, paddingVertical: spacing[3], alignItems: 'center' as const },
+  toggleBtnActive: { backgroundColor: colors.primary[400] },
+  toggleText: { color: colors.text.muted, fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold },
+  toggleTextActive: { color: colors.text.onPrimary },
+  offlineBanner: { backgroundColor: colors.neutral[800], borderLeftWidth: 3, borderLeftColor: colors.warning.light, borderRadius: borderRadius.md, padding: spacing[3], marginBottom: spacing[4] },
+  offlineText: { color: colors.warning.light, fontSize: typography.fontSize.sm },
+};
